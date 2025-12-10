@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Items - KAARYASETU{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Browse Items</h2>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <form method="GET" action="{{ url_for('main.items') }}" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" name="search" placeholder="Search items..." value="{{ search }}">
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" name="category">
+                    <option value="">All Categories</option>
+                    <option value="camera" {% if category == 'camera' %}selected{% endif %}>Camera</option>
+                    <option value="bike" {% if category == 'bike' %}selected{% endif %}>Bike</option>
+                    <option value="car" {% if category == 'car' %}selected{% endif %}>Car</option>
+                    <option value="printer" {% if category == 'printer' %}selected{% endif %}>Printer</option>
+                    <option value="electronics" {% if category == 'electronics' %}selected{% endif %}>Electronics</option>
+                    <option value="tools" {% if category == 'tools' %}selected{% endif %}>Tools</option>
+                    <option value="furniture" {% if category == 'furniture' %}selected{% endif %}>Furniture</option>
+                    <option value="other" {% if category == 'other' %}selected{% endif %}>Other</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+            {% if current_user.is_authenticated %}
+            <div class="col-md-3">
+                <a href="#" class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                    <i class="bi bi-plus-circle"></i> List an Item
+                </a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    {% if items %}
+        {% for item in items %}
+        <div class="col-md-4 mb-4">
+            <div class="card item-card">
+                {% if item.image_path %}
+                <img src="{{ url_for('main.uploaded_file', filename=item.image_path) }}" class="card-img-top item-image" alt="{{ item.name }}">
+                {% else %}
+                <div class="card-img-top item-image bg-secondary d-flex align-items-center justify-content-center">
+                    <i class="bi bi-image" style="font-size: 3rem; color: white;"></i>
+                </div>
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ item.name }}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-info">{{ item.category }}</span>
+                        <span class="badge bg-success">₹{{ "%.2f"|format(item.daily_rate) }}/day</span>
+                    </p>
+                    <p class="card-text text-muted">{{ item.description[:100] }}{% if item.description|length > 100 %}...{% endif %}</p>
+                    {% if item.location %}
+                    <p class="card-text"><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ item.location }}</small></p>
+                    {% endif %}
+                    <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">No items found matching your criteria.</div>
+        </div>
+    {% endif %}
+</div>
+
+{% if current_user.is_authenticated %}
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">List a New Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addItemForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="item_name" class="form-label">Item Name *</label>
+                        <input type="text" class="form-control" id="item_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_description" class="form-label">Description</label>
+                        <textarea class="form-control" id="item_description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_category" class="form-label">Category *</label>
+                        <select class="form-select" id="item_category" name="category" required>
+                            <option value="">Select Category</option>
+                            <option value="camera">Camera</option>
+                            <option value="bike">Bike</option>
+                            <option value="car">Car</option>
+                            <option value="printer">Printer</option>
+                            <option value="electronics">Electronics</option>
+                            <option value="tools">Tools</option>
+                            <option value="furniture">Furniture</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_daily_rate" class="form-label">Daily Rate (₹) *</label>
+                        <input type="number" step="0.01" class="form-control" id="item_daily_rate" name="daily_rate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_location" class="form-label">Location</label>
+                        <input type="text" class="form-control" id="item_location" name="location">
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_image" class="form-label">Image *</label>
+                        <input type="file" class="form-control" id="item_image" name="image" accept="image/*" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="submitItem()">List Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if current_user.is_authenticated %}
+<script>
+function submitItem() {
+    const form = document.getElementById('addItemForm');
+    const formData = new FormData(form);
+    
+    fetch('/api/items', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Item listed successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to list item'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error listing item');
+    });
+}
+</script>
+{% endif %}
+{% endblock %}
+

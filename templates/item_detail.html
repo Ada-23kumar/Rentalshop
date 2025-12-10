@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.name }} - KAARYASETU{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        {% if item.image_path %}
+        <img src="{{ url_for('main.uploaded_file', filename=item.image_path) }}" class="img-fluid rounded" alt="{{ item.name }}">
+        {% else %}
+        <div class="bg-secondary rounded d-flex align-items-center justify-content-center" style="height: 400px;">
+            <i class="bi bi-image" style="font-size: 5rem; color: white;"></i>
+        </div>
+        {% endif %}
+    </div>
+    <div class="col-md-6">
+        <h2>{{ item.name }}</h2>
+        <p>
+            <span class="badge bg-info">{{ item.category }}</span>
+            <span class="badge bg-success">₹{{ "%.2f"|format(item.daily_rate) }}/day</span>
+            {% if item.is_available %}
+            <span class="badge bg-primary">Available</span>
+            {% else %}
+            <span class="badge bg-secondary">Not Available</span>
+            {% endif %}
+        </p>
+        <hr>
+        <h5>Description</h5>
+        <p>{{ item.description or 'No description provided.' }}</p>
+        
+        {% if item.location %}
+        <p><strong>Location:</strong> <i class="bi bi-geo-alt"></i> {{ item.location }}</p>
+        {% endif %}
+        
+        <p><strong>Owner:</strong> {{ item.owner.full_name }}</p>
+        
+        {% if current_user.is_authenticated and current_user.id != item.owner_id and item.is_available %}
+        <hr>
+        <h5>Book This Item</h5>
+        <form id="rentalForm">
+            <div class="mb-3">
+                <label for="start_date" class="form-label">Start Date</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" required>
+            </div>
+            <div class="mb-3">
+                <label for="end_date" class="form-label">End Date</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" required>
+            </div>
+            <div id="rental_summary" class="alert alert-info" style="display: none;">
+                <strong>Total Days:</strong> <span id="total_days">0</span><br>
+                <strong>Total Amount:</strong> ₹<span id="total_amount">0.00</span>
+            </div>
+            <button type="submit" class="btn btn-primary">Book Now</button>
+        </form>
+        {% elif current_user.is_authenticated and current_user.id == item.owner_id %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> This is your item. You cannot rent it.
+        </div>
+        {% elif not current_user.is_authenticated %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> Please <a href="{{ url_for('auth.login') }}">login</a> to book this item.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if current_user.is_authenticated and current_user.id != item.owner_id and item.is_available %}
+<script>
+const dailyRate = {{ item.daily_rate }};
+const itemId = {{ item.id }};
+
+document.getElementById('start_date').min = new Date().toISOString().split('T')[0];
+
+document.getElementById('start_date').addEventListener('change', calculateTotal);
+document.getElementById('end_date').addEventListener('change', calculateTotal);
+
+function calculateTotal() {
+    const startDate = new Date(document.getElementById('start_date').value);
+    const endDate = new Date(document.getElementById('end_date').value);
+    
+    if (startDate && endDate && endDate > startDate) {
+        const days = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+        const total = days * dailyRate;
+        
+        document.getElementById('total_days').textContent = days;
+        document.getElementById('total_amount').textContent = total.toFixed(2);
+        document.getElementById('rental_summary').style.display = 'block';
+    } else {
+        document.getElementById('rental_summary').style.display = 'none';
+    }
+}
+
+document.getElementById('rentalForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = {
+        item_id: itemId,
+        start_date: document.getElementById('start_date').value,
+        end_date: document.getElementById('end_date').value
+    };
+    
+    fetch('/api/rentals', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Booking created successfully! Redirecting to payment...');
+            // Create payment
+            return fetch('/api/payments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    rental_id: data.rental.id,
+                    payment_method: 'card'
+                })
+            });
+        } else {
+            throw new Error(data.error || 'Failed to create booking');
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Payment processed successfully! Redirecting to dashboard...');
+            window.location.href = '/dashboard';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error: ' + error.message);
+    });
+});
+</script>
+{% endif %}
+{% endblock %}
+

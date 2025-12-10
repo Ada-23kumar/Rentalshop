@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - KAARYASETU{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+
+<ul class="nav nav-tabs mb-4" id="dashboardTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="my-items-tab" data-bs-toggle="tab" data-bs-target="#my-items" type="button">
+            My Items ({{ owned_items|length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="rentals-tab" data-bs-toggle="tab" data-bs-target="#rentals" type="button">
+            My Rentals ({{ rentals_as_renter|length }})
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="requests-tab" data-bs-toggle="tab" data-bs-target="#requests" type="button">
+            Rental Requests ({{ rentals_as_owner|length }})
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="dashboardTabsContent">
+    <!-- My Items Tab -->
+    <div class="tab-pane fade show active" id="my-items" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>My Listed Items</h4>
+            <a href="#" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addItemModal">
+                <i class="bi bi-plus-circle"></i> List New Item
+            </a>
+        </div>
+        
+        {% if owned_items %}
+        <div class="row">
+            {% for item in owned_items %}
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    {% if item.image_path %}
+                    <img src="{{ url_for('main.uploaded_file', filename=item.image_path) }}" class="card-img-top item-image" alt="{{ item.name }}">
+                    {% else %}
+                    <div class="card-img-top item-image bg-secondary d-flex align-items-center justify-content-center">
+                        <i class="bi bi-image" style="font-size: 3rem; color: white;"></i>
+                    </div>
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ item.name }}</h5>
+                        <p class="card-text">
+                            <span class="badge bg-info">{{ item.category }}</span>
+                            <span class="badge bg-success">₹{{ "%.2f"|format(item.daily_rate) }}/day</span>
+                            {% if item.is_available %}
+                            <span class="badge bg-primary">Available</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Not Available</span>
+                            {% endif %}
+                        </p>
+                        <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-sm btn-primary">View</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">You haven't listed any items yet. <a href="#" data-bs-toggle="modal" data-bs-target="#addItemModal">List your first item</a>!</div>
+        {% endif %}
+    </div>
+
+    <!-- My Rentals Tab -->
+    <div class="tab-pane fade" id="rentals" role="tabpanel">
+        <h4>My Rentals</h4>
+        {% if rentals_as_renter %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Days</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals_as_renter %}
+                    <tr>
+                        <td>{{ rental.item.name }}</td>
+                        <td>{{ rental.start_date }}</td>
+                        <td>{{ rental.end_date }}</td>
+                        <td>{{ rental.total_days }}</td>
+                        <td>${{ "%.2f"|format(rental.total_amount) }}</td>
+                        <td>
+                            <span class="badge bg-{% if rental.status == 'confirmed' %}success{% elif rental.status == 'pending' %}warning{% elif rental.status == 'completed' %}info{% else %}secondary{% endif %}">
+                                {{ rental.status|title }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">You haven't rented any items yet.</div>
+        {% endif %}
+    </div>
+
+    <!-- Rental Requests Tab -->
+    <div class="tab-pane fade" id="requests" role="tabpanel">
+        <h4>Rental Requests for My Items</h4>
+        {% if rentals_as_owner %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Renter</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rental in rentals_as_owner %}
+                    <tr>
+                        <td>{{ rental.item.name }}</td>
+                        <td>{{ rental.renter.full_name }}</td>
+                        <td>{{ rental.start_date }}</td>
+                        <td>{{ rental.end_date }}</td>
+                        <td>${{ "%.2f"|format(rental.total_amount) }}</td>
+                        <td>
+                            <span class="badge bg-{% if rental.status == 'confirmed' %}success{% elif rental.status == 'pending' %}warning{% elif rental.status == 'completed' %}info{% else %}secondary{% endif %}">
+                                {{ rental.status|title }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if rental.status == 'pending' %}
+                            <button class="btn btn-sm btn-success" onclick="updateRentalStatus({{ rental.id }}, 'confirmed')">Confirm</button>
+                            <button class="btn btn-sm btn-danger" onclick="updateRentalStatus({{ rental.id }}, 'cancelled')">Cancel</button>
+                            {% elif rental.status == 'confirmed' %}
+                            <button class="btn btn-sm btn-info" onclick="updateRentalStatus({{ rental.id }}, 'completed')">Mark Complete</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">No rental requests for your items yet.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Item Modal -->
+<div class="modal fade" id="addItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">List a New Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addItemForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="item_name" class="form-label">Item Name *</label>
+                        <input type="text" class="form-control" id="item_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_description" class="form-label">Description</label>
+                        <textarea class="form-control" id="item_description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_category" class="form-label">Category *</label>
+                        <select class="form-select" id="item_category" name="category" required>
+                            <option value="">Select Category</option>
+                            <option value="camera">Camera</option>
+                            <option value="bike">Bike</option>
+                            <option value="car">Car</option>
+                            <option value="printer">Printer</option>
+                            <option value="electronics">Electronics</option>
+                            <option value="tools">Tools</option>
+                            <option value="furniture">Furniture</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_daily_rate" class="form-label">Daily Rate (₹) *</label>
+                        <input type="number" step="0.01" class="form-control" id="item_daily_rate" name="daily_rate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_location" class="form-label">Location</label>
+                        <input type="text" class="form-control" id="item_location" name="location">
+                    </div>
+                    <div class="mb-3">
+                        <label for="item_image" class="form-label">Image *</label>
+                        <input type="file" class="form-control" id="item_image" name="image" accept="image/*" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="submitItem()">List Item</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function submitItem() {
+    const form = document.getElementById('addItemForm');
+    const formData = new FormData(form);
+    
+    fetch('/api/items', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Item listed successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to list item'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error listing item');
+    });
+}
+
+function updateRentalStatus(rentalId, status) {
+    fetch(`/api/rentals/${rentalId}/status`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert('Rental status updated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to update status'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating rental status');
+    });
+}
+</script>
+{% endblock %}
+
