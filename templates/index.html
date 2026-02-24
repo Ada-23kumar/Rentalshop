@@ -33,6 +33,14 @@
                         <span class="badge bg-info">{{ item.category }}</span>
                         <span class="badge bg-success">₹{{ "%.2f"|format(item.daily_rate) }}/day</span>
                     </p>
+                    {% if item.average_rating is not none %}
+                    <p class="card-text mb-1">
+                        <span class="text-warning">
+                            {% for i in range(1, 6) %}{% if item.average_rating >= i %}<i class="bi bi-star-fill"></i>{% elif item.average_rating >= (i - 0.5) %}<i class="bi bi-star-half"></i>{% else %}<i class="bi bi-star"></i>{% endif %}{% endfor %}
+                        </span>
+                        <span class="text-muted small">{{ "%.1f"|format(item.average_rating) }} ({{ item.rating_count }})</span>
+                    </p>
+                    {% endif %}
                     <p class="card-text text-muted">{{ item.description[:100] }}{% if item.description|length > 100 %}...{% endif %}</p>
                     <a href="{{ url_for('main.item_detail', item_id=item.id) }}" class="btn btn-primary">View Details</a>
                 </div>

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, send_from_directory, current_app
 from flask_login import login_required, current_user
 from app import db
-from app.models import Item, Rental, Payment, User
+from app.models import Item, Rental, Payment, User, ItemReview
 from werkzeug.utils import secure_filename
 from datetime import datetime, date
 import os
@@ -45,6 +45,8 @@ def get_items():
             'location': item.location,
             'owner_id': item.owner_id,
             'owner_name': item.owner.full_name,
+            'average_rating': item.average_rating,
+            'rating_count': item.rating_count,
             'created_at': item.created_at.isoformat()
         } for item in items]
     }), 200
@@ -67,8 +69,83 @@ def get_item(item_id):
         'owner_name': item.owner.full_name,
         'owner_email': item.owner.email,
         'owner_phone': item.owner.phone,
+        'average_rating': item.average_rating,
+        'rating_count': item.rating_count,
         'created_at': item.created_at.isoformat()
     }), 200
+
+@api_bp.route('/items/<int:item_id>/reviews', methods=['GET'])
+def get_item_reviews(item_id):
+    """Get all reviews for an item"""
+    item = Item.query.get_or_404(item_id)
+    reviews = ItemReview.query.filter_by(item_id=item_id).order_by(ItemReview.created_at.desc()).all()
+    return jsonify({
+        'reviews': [{
+            'id': r.id,
+            'user_id': r.user_id,
+            'user_name': r.user.full_name,
+            'rating': r.rating,
+            'comment': r.comment or '',
+            'created_at': r.created_at.isoformat()
+        } for r in reviews],
+        'average_rating': item.average_rating,
+        'rating_count': item.rating_count
+    }), 200
+
+@api_bp.route('/items/<int:item_id>/reviews', methods=['POST'])
+@login_required
+def create_item_review(item_id):
+    """Add or update a rating and comment for an item (one per user per item)"""
+    item = Item.query.get_or_404(item_id)
+    if item.owner_id == current_user.id:
+        return jsonify({'error': 'You cannot rate your own item'}), 403
+    data = request.get_json() or {}
+    rating = data.get('rating')
+    comment = data.get('comment', '').strip()
+    if rating is None:
+        return jsonify({'error': 'Rating is required'}), 400
+    try:
+        rating = int(rating)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Rating must be a number 1-5'}), 400
+    if rating < 1 or rating > 5:
+        return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+    existing = ItemReview.query.filter_by(item_id=item_id, user_id=current_user.id).first()
+    if existing:
+        existing.rating = rating
+        existing.comment = comment or None
+        db.session.commit()
+        db.session.refresh(item)
+        return jsonify({
+            'message': 'Review updated',
+            'review': {
+                'id': existing.id,
+                'user_id': existing.user_id,
+                'user_name': current_user.full_name,
+                'rating': existing.rating,
+                'comment': existing.comment or '',
+                'created_at': existing.created_at.isoformat()
+            },
+            'average_rating': item.average_rating,
+            'rating_count': item.rating_count
+        }), 200
+    review = ItemReview(item_id=item_id, user_id=current_user.id, rating=rating, comment=comment or None)
+    db.session.add(review)
+    db.session.commit()
+    db.session.refresh(item)
+    return jsonify({
+        'message': 'Review added',
+        'review': {
+            'id': review.id,
+            'user_id': review.user_id,
+            'user_name': current_user.full_name,
+            'rating': review.rating,
+            'comment': review.comment or '',
+            'created_at': review.created_at.isoformat()
+        },
+        'average_rating': item.average_rating,
+        'rating_count': item.rating_count
+    }), 201
 
 @api_bp.route('/items', methods=['POST'])
 @login_required

@@ -40,9 +40,38 @@ class Item(db.Model):
     
     # Relationships
     rentals = db.relationship('Rental', backref='item', lazy=True, cascade='all, delete-orphan')
+    reviews = db.relationship('ItemReview', backref='item', lazy=True, cascade='all, delete-orphan')
+    
+    @property
+    def average_rating(self):
+        if not self.reviews:
+            return None
+        return round(sum(r.rating for r in self.reviews) / len(self.reviews), 1)
+    
+    @property
+    def rating_count(self):
+        return len(self.reviews)
     
     def __repr__(self):
         return f'<Item {self.name}>'
+
+
+class ItemReview(db.Model):
+    """Rating and comment for an item by a user."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)  # 1-5
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (db.UniqueConstraint('item_id', 'user_id', name='unique_item_user_review'),)
+    
+    # Relationships
+    user = db.relationship('User', backref=db.backref('item_reviews', lazy=True))
+    
+    def __repr__(self):
+        return f'<ItemReview item={self.item_id} user={self.user_id} rating={self.rating}>'
 
 class Rental(db.Model):
     id = db.Column(db.Integer, primary_key=True)

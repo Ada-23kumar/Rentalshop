@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ item.name }} - KAARYASETU{% endblock %}
+{% block title %}{{ item.name }} - Rental Marketplace{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -17,11 +17,24 @@
         <h2>{{ item.name }}</h2>
         <p>
             <span class="badge bg-info">{{ item.category }}</span>
-            <span class="badge bg-success">₹{{ "%.2f"|format(item.daily_rate) }}/day</span>
+            <span class="badge bg-success">${{ "%.2f"|format(item.daily_rate) }}/day</span>
             {% if item.is_available %}
             <span class="badge bg-primary">Available</span>
             {% else %}
             <span class="badge bg-secondary">Not Available</span>
+            {% endif %}
+        </p>
+        <p class="mb-2" id="itemRatingDisplay">
+            {% if item.average_rating is not none %}
+            <span class="rating-stars text-warning" title="{{ "%.1f"|format(item.average_rating) }} out of 5">
+                {% for i in range(1, 6) %}
+                {% if item.average_rating >= i %}<i class="bi bi-star-fill"></i>{% elif item.average_rating >= (i - 0.5) %}<i class="bi bi-star-half"></i>{% else %}<i class="bi bi-star"></i>{% endif %}
+                {% endfor %}
+            </span>
+            <span class="text-muted ms-1">{{ "%.1f"|format(item.average_rating) }}</span>
+            <span class="text-muted">({{ item.rating_count }} review{{ 's' if item.rating_count != 1 else '' }})</span>
+            {% else %}
+            <span class="text-muted">No ratings yet</span>
             {% endif %}
         </p>
         <hr>
@@ -48,7 +61,7 @@
             </div>
             <div id="rental_summary" class="alert alert-info" style="display: none;">
                 <strong>Total Days:</strong> <span id="total_days">0</span><br>
-                <strong>Total Amount:</strong> ₹<span id="total_amount">0.00</span>
+                <strong>Total Amount:</strong> $<span id="total_amount">0.00</span>
             </div>
             <button type="submit" class="btn btn-primary">Book Now</button>
         </form>
@@ -64,13 +77,158 @@
     </div>
 </div>
 
+<hr class="my-4">
+<div class="row">
+    <div class="col-12">
+        <h4>Reviews &amp; Ratings</h4>
+        {% if current_user.is_authenticated and current_user.id != item.owner_id %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <h6 class="card-title">Leave a rating and comment</h6>
+                <form id="reviewForm">
+                    <div class="mb-2">
+                        <label class="form-label">Rating</label>
+                        <div class="rating-input mb-2">
+                            {% for i in range(1, 6) %}
+                            <i class="bi bi-star rating-star" data-value="{{ i }}" role="button" aria-label="{{ i }} star{{ 's' if i != 1 else '' }}"></i>
+                            {% endfor %}
+                        </div>
+                        <input type="hidden" name="rating" id="ratingValue" value="" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reviewComment" class="form-label">Comment (optional)</label>
+                        <textarea class="form-control" id="reviewComment" name="comment" rows="3" placeholder="Share your experience..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Submit Review</button>
+                </form>
+            </div>
+        </div>
+        {% elif not current_user.is_authenticated %}
+        <p class="text-muted">Please <a href="{{ url_for('auth.login') }}">login</a> to leave a review.</p>
+        {% endif %}
+        <div id="reviewsList">
+            {% for review in item.reviews|sort(attribute='created_at', reverse=true) %}
+            <div class="card mb-2 review-item" data-review-id="{{ review.id }}">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center mb-1">
+                        <span class="text-warning me-2">
+                            {% for i in range(1, 6) %}{% if i <= review.rating %}<i class="bi bi-star-fill"></i>{% else %}<i class="bi bi-star"></i>{% endif %}{% endfor %}
+                        </span>
+                        <strong>{{ review.user.full_name }}</strong>
+                        <span class="text-muted ms-2 small">{{ review.created_at.strftime('%b %d, %Y') }}</span>
+                    </div>
+                    {% if review.comment %}
+                    <p class="mb-0 text-muted">{{ review.comment }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted" id="noReviewsMsg">No reviews yet. Be the first to rate this item!</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<script>
+const itemId = {{ item.id }};
+{% if current_user.is_authenticated %}
+(function() {
+    const ratingStars = document.querySelectorAll('.rating-star');
+    const ratingInput = document.getElementById('ratingValue');
+    if (ratingStars.length && ratingInput) {
+        let selectedRating = 0;
+        ratingStars.forEach(function(star) {
+            star.addEventListener('click', function() {
+                selectedRating = parseInt(star.getAttribute('data-value'), 10);
+                ratingInput.value = selectedRating;
+                ratingStars.forEach(function(s, i) {
+                    if (i < selectedRating) {
+                        s.classList.remove('bi-star');
+                        s.classList.add('bi-star-fill');
+                    } else {
+                        s.classList.remove('bi-star-fill');
+                        s.classList.add('bi-star');
+                    }
+                });
+            });
+            star.addEventListener('mouseenter', function() {
+                const v = parseInt(star.getAttribute('data-value'), 10);
+                ratingStars.forEach(function(s, i) {
+                    s.classList.toggle('bi-star-fill', i < v);
+                    s.classList.toggle('bi-star', i >= v);
+                });
+            });
+        });
+        document.querySelector('.rating-input')?.addEventListener('mouseleave', function() {
+            ratingStars.forEach(function(s, i) {
+                s.classList.toggle('bi-star-fill', i < selectedRating);
+                s.classList.toggle('bi-star', i >= selectedRating);
+            });
+        });
+    }
+    const reviewForm = document.getElementById('reviewForm');
+    if (reviewForm) {
+        reviewForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const rating = document.getElementById('ratingValue').value;
+            if (!rating || rating < 1 || rating > 5) {
+                alert('Please select a rating from 1 to 5 stars.');
+                return;
+            }
+            const comment = document.getElementById('reviewComment').value.trim();
+            fetch('/api/items/' + itemId + '/reviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating: parseInt(rating, 10), comment: comment })
+            })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+                if (result.ok) {
+                    var noMsg = document.getElementById('noReviewsMsg');
+                    if (noMsg) noMsg.remove();
+                    var existing = document.querySelector('.review-item[data-user-review]');
+                    if (existing) existing.remove();
+                    var div = document.createElement('div');
+                    div.className = 'card mb-2 review-item';
+                    div.setAttribute('data-review-id', result.data.review.id);
+                    div.setAttribute('data-user-review', '1');
+                    var starHtml = '';
+                    for (var i = 1; i <= 5; i++) starHtml += result.data.review.rating >= i ? '<i class="bi bi-star-fill"></i>' : '<i class="bi bi-star"></i>';
+                    div.innerHTML = '<div class="card-body py-2"><div class="d-flex align-items-center mb-1"><span class="text-warning me-2">' + starHtml +
+                        '</span><strong>' + (result.data.review.user_name || 'You') + '</strong><span class="text-muted ms-2 small">Just now</span></div>' +
+                        (result.data.review.comment ? '<p class="mb-0 text-muted">' + escapeHtml(result.data.review.comment) + '</p>' : '') + '</div></div>';
+                    document.getElementById('reviewsList').insertBefore(div, document.getElementById('reviewsList').firstChild);
+                    var ratingDisplay = document.getElementById('itemRatingDisplay');
+                    if (ratingDisplay && result.data.average_rating != null && result.data.rating_count != null) {
+                        var h = '';
+                        for (var i = 1; i <= 5; i++) h += result.data.average_rating >= i ? '<i class="bi bi-star-fill"></i>' : (result.data.average_rating >= i - 0.5 ? '<i class="bi bi-star-half"></i>' : '<i class="bi bi-star"></i>');
+                        ratingDisplay.innerHTML = '<span class="rating-stars text-warning">' + h + '</span> <span class="text-muted ms-1">' + result.data.average_rating.toFixed(1) + '</span> <span class="text-muted">(' + result.data.rating_count + ' review' + (result.data.rating_count !== 1 ? 's' : '') + ')</span>';
+                    }
+                    reviewForm.reset();
+                    document.getElementById('ratingValue').value = '';
+                    selectedRating = 0;
+                    ratingStars.forEach(function(s) { s.classList.remove('bi-star-fill'); s.classList.add('bi-star'); });
+                } else {
+                    alert(result.data.error || 'Failed to submit review');
+                }
+            })
+            .catch(function() { alert('Failed to submit review'); });
+        });
+    }
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+})();
+{% endif %}
+</script>
 {% if current_user.is_authenticated and current_user.id != item.owner_id and item.is_available %}
 <script>
 const dailyRate = {{ item.daily_rate }};
-const itemId = {{ item.id }};
 
 document.getElementById('start_date').min = new Date().toISOString().split('T')[0];
 
