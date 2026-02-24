@@ -123,3 +123,13 @@ See `ER_DIAGRAM.md` for detailed entity relationship diagram.
 
 This project is for educational purposes.
 
+## to Run
+```
+source venv/bin/activate
+```
+to activate environment
+
+```
+python3 app.py
+```
+to run the app
