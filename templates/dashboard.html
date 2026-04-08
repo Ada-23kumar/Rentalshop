@@ -90,7 +90,7 @@
                         <td>{{ rental.start_date }}</td>
                         <td>{{ rental.end_date }}</td>
                         <td>{{ rental.total_days }}</td>
-                        <td>${{ "%.2f"|format(rental.total_amount) }}</td>
+                        <td>₹{{ "%.2f"|format(rental.total_amount) }}</td>
                         <td>
                             <span class="badge bg-{% if rental.status == 'confirmed' %}success{% elif rental.status == 'pending' %}warning{% elif rental.status == 'completed' %}info{% else %}secondary{% endif %}">
                                 {{ rental.status|title }}
