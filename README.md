@@ -124,6 +124,7 @@ See `ER_DIAGRAM.md` for detailed entity relationship diagram.
 This project is for educational purposes.
 
 ## to Run
+
 ```
 source venv/bin/activate
 ```

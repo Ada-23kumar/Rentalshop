@@ -127,6 +127,35 @@
             {% endfor %}
         </div>
     </div>
+    <div class="col-md-4">
+        <h4>Item Chat <span class="badge bg-secondary">Demo</span></h4>
+        {% if current_user.is_authenticated %}
+        <div class="card">
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    Chat between owner and renter for this item.
+                </p>
+                {% if current_user.id == item.owner_id %}
+                <div class="mb-2">
+                    <label class="form-label">Chat with user ID</label>
+                    <input type="number" class="form-control form-control-sm" id="chatWithUserId" placeholder="Enter renter user id">
+                </div>
+                {% endif %}
+                <div id="chatMessages" class="border rounded p-2 mb-2" style="height: 260px; overflow-y: auto;">
+                    <p class="text-muted small mb-0">No messages yet.</p>
+                </div>
+                <form id="chatForm">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="chatInput" placeholder="Type message..." required>
+                        <button class="btn btn-primary" type="submit">Send</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Please <a href="{{ url_for('auth.login') }}">login</a> to use chat.</p>
+        {% endif %}
+    </div>
 </div>
 
 {% endblock %}
@@ -218,6 +247,83 @@ const itemId = {{ item.id }};
             .catch(function() { alert('Failed to submit review'); });
         });
     }
+
+    const chatBox = document.getElementById('chatMessages');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatWithUserId = document.getElementById('chatWithUserId');
+
+    function renderMessages(messages) {
+        if (!chatBox) return;
+        if (!messages || !messages.length) {
+            chatBox.innerHTML = '<p class="text-muted small mb-0">No messages yet.</p>';
+            return;
+        }
+        chatBox.innerHTML = '';
+        messages.forEach(function(m) {
+            const mine = m.sender_id === {{ current_user.id }};
+            const wrap = document.createElement('div');
+            wrap.className = 'mb-2 d-flex ' + (mine ? 'justify-content-end' : 'justify-content-start');
+            const bubble = document.createElement('div');
+            bubble.className = 'p-2 rounded ' + (mine ? 'bg-primary text-white' : 'bg-light');
+            bubble.style.maxWidth = '85%';
+            bubble.innerHTML = '<div class="small fw-semibold">' + escapeHtml(m.sender_name) + '</div>' +
+                '<div>' + escapeHtml(m.content) + '</div>' +
+                '<div class="small ' + (mine ? 'text-white-50' : 'text-muted') + '">' + new Date(m.created_at).toLocaleString() + '</div>';
+            wrap.appendChild(bubble);
+            chatBox.appendChild(wrap);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function loadChat() {
+        if (!chatBox) return;
+        let url = '/api/items/' + itemId + '/messages';
+        if (chatWithUserId && chatWithUserId.value) {
+            url += '?with_user_id=' + encodeURIComponent(chatWithUserId.value);
+        }
+        fetch(url)
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+                if (!result.ok) return;
+                renderMessages(result.data.messages || []);
+                if (chatWithUserId && result.data.other_user_id && !chatWithUserId.value) {
+                    chatWithUserId.value = result.data.other_user_id;
+                }
+            });
+    }
+
+    if (chatForm && chatInput) {
+        chatForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const content = chatInput.value.trim();
+            if (!content) return;
+            const payload = { content: content };
+            if (chatWithUserId && chatWithUserId.value) {
+                payload.receiver_id = parseInt(chatWithUserId.value, 10);
+            }
+            fetch('/api/items/' + itemId + '/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(result) {
+                if (!result.ok) {
+                    alert(result.data.error || 'Failed to send message');
+                    return;
+                }
+                chatInput.value = '';
+                loadChat();
+            })
+            .catch(function() { alert('Failed to send message'); });
+        });
+        if (chatWithUserId) {
+            chatWithUserId.addEventListener('change', loadChat);
+        }
+        loadChat();
+    }
+
     function escapeHtml(text) {
         var div = document.createElement('div');
         div.textContent = text;

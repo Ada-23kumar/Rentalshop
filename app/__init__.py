@@ -13,8 +13,9 @@ def create_app():
     upload_dir = os.path.join(basedir, 'uploads')
     
     app = Flask(__name__, template_folder=template_dir)
-    app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///rental_marketplace.db'
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+    db_path = os.environ.get('DATABASE_PATH', os.path.join(basedir, 'rental_marketplace.db'))
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER'] = upload_dir
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size

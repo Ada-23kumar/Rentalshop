@@ -16,6 +16,8 @@ class User(UserMixin, db.Model):
     # Relationships
     items = db.relationship('Item', backref='owner', lazy=True, cascade='all, delete-orphan')
     rentals_as_renter = db.relationship('Rental', foreign_keys='Rental.renter_id', backref='renter', lazy=True)
+    sent_messages = db.relationship('ItemMessage', foreign_keys='ItemMessage.sender_id', backref='sender', lazy=True, cascade='all, delete-orphan')
+    received_messages = db.relationship('ItemMessage', foreign_keys='ItemMessage.receiver_id', backref='receiver', lazy=True, cascade='all, delete-orphan')
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -41,6 +43,7 @@ class Item(db.Model):
     # Relationships
     rentals = db.relationship('Rental', backref='item', lazy=True, cascade='all, delete-orphan')
     reviews = db.relationship('ItemReview', backref='item', lazy=True, cascade='all, delete-orphan')
+    messages = db.relationship('ItemMessage', backref='item', lazy=True, cascade='all, delete-orphan')
     
     @property
     def average_rating(self):
@@ -72,6 +75,20 @@ class ItemReview(db.Model):
     
     def __repr__(self):
         return f'<ItemReview item={self.item_id} user={self.user_id} rating={self.rating}>'
+
+
+class ItemMessage(db.Model):
+    """Chat message between two users about a specific item."""
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    
+    def __repr__(self):
+        return f'<ItemMessage item={self.item_id} from={self.sender_id} to={self.receiver_id}>'
 
 class Rental(db.Model):
     id = db.Column(db.Integer, primary_key=True)

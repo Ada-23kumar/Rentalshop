@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, send_from_directory, current_app
 from flask_login import login_required, current_user
 from app import db
-from app.models import Item, Rental, Payment, User, ItemReview
+from app.models import Item, Rental, Payment, User, ItemReview, ItemMessage
 from werkzeug.utils import secure_filename
 from datetime import datetime, date
 import os
@@ -145,6 +145,93 @@ def create_item_review(item_id):
         },
         'average_rating': item.average_rating,
         'rating_count': item.rating_count
+    }), 201
+
+
+@api_bp.route('/items/<int:item_id>/messages', methods=['GET'])
+@login_required
+def get_item_messages(item_id):
+    """Get chat messages for current user and item owner (demo mode)."""
+    item = Item.query.get_or_404(item_id)
+    if current_user.id == item.owner_id:
+        other_user_id = request.args.get('with_user_id', type=int)
+        if not other_user_id:
+            latest = ItemMessage.query.filter_by(item_id=item_id).order_by(ItemMessage.created_at.desc()).first()
+            if latest:
+                other_user_id = latest.sender_id if latest.sender_id != current_user.id else latest.receiver_id
+        if not other_user_id:
+            return jsonify({'messages': [], 'other_user_id': None}), 200
+    else:
+        other_user_id = item.owner_id
+
+    messages = ItemMessage.query.filter(
+        ItemMessage.item_id == item_id,
+        db.or_(
+            db.and_(ItemMessage.sender_id == current_user.id, ItemMessage.receiver_id == other_user_id),
+            db.and_(ItemMessage.sender_id == other_user_id, ItemMessage.receiver_id == current_user.id)
+        )
+    ).order_by(ItemMessage.created_at.asc()).all()
+
+    return jsonify({
+        'messages': [{
+            'id': m.id,
+            'item_id': m.item_id,
+            'sender_id': m.sender_id,
+            'sender_name': m.sender.full_name,
+            'receiver_id': m.receiver_id,
+            'receiver_name': m.receiver.full_name,
+            'content': m.content,
+            'created_at': m.created_at.isoformat()
+        } for m in messages],
+        'other_user_id': other_user_id
+    }), 200
+
+
+@api_bp.route('/items/<int:item_id>/messages', methods=['POST'])
+@login_required
+def create_item_message(item_id):
+    """Send chat message between owner and renter on item detail (demo mode)."""
+    item = Item.query.get_or_404(item_id)
+    data = request.get_json() or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({'error': 'Message content is required'}), 400
+
+    if current_user.id == item.owner_id:
+        receiver_id = data.get('receiver_id')
+        try:
+            receiver_id = int(receiver_id)
+        except (TypeError, ValueError):
+            receiver_id = None
+        if not receiver_id:
+            return jsonify({'error': 'Owner must choose a receiver'}), 400
+        receiver = User.query.get(receiver_id)
+        if not receiver or receiver.id == current_user.id:
+            return jsonify({'error': 'Invalid receiver'}), 400
+    else:
+        receiver_id = item.owner_id
+
+    message = ItemMessage(
+        item_id=item_id,
+        sender_id=current_user.id,
+        receiver_id=receiver_id,
+        content=content
+    )
+    db.session.add(message)
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Message sent',
+        'chat_message': {
+            'id': message.id,
+            'item_id': message.item_id,
+            'sender_id': message.sender_id,
+            'sender_name': message.sender.full_name,
+            'receiver_id': message.receiver_id,
+            'receiver_name': message.receiver.full_name,
+            'content': message.content,
+            'created_at': message.created_at.isoformat()
+        }
     }), 201
 
 @api_bp.route('/items', methods=['POST'])
